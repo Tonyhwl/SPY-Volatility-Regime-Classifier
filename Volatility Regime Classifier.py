@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 TICKER = 'SPY' #SPY
 start_date = '2005-01-01' #20 years of data
+TRADING_DAYS = 252
 
 # yf.download() returns dataframe indexed by trading dates
 # we only want the close column from 'Open, High, Low, Close, Adj Close, Volume'
@@ -125,6 +126,13 @@ def apply_hysteresis(
     # return as a Series with the same index as input
     return pd.Series(smoothed_labels, index=regime_series.index)
 
+# --- Vol-adjusted sizing params ---
+target_daily_vol = 0.010   # aim for ~1.0% daily vol
+
+# minimum and maximum position size for stability
+size_floor      = 0.10     # never size below 10%
+size_cap        = 1.50     # never size above 150%
+
 # organise into a neat table
 analysis_df = pd.DataFrame(index=price_data.index)
 analysis_df["close"] = price_data["Close"]
@@ -135,6 +143,10 @@ analysis_df["regime_raw"] = label_volatility_regime(
     low_enter=0.12, low_exit=0.14,
     high_enter=0.28,  high_exit=0.24
 )
+# convert annualised 30d realised volatility to daily volatility
+# shift by 1 day to avoid look-ahead bias in backtests
+analysis_df["daily_vol_est"] = (analysis_df["realised_vol_30d"] / np.sqrt(252)).shift(1)
+
 analysis_df["regime"] = apply_hysteresis(analysis_df["regime_raw"], k_consecutive=7)
 # show the last few rows to compare raw vs smoothed
 print(analysis_df[["realised_vol_30d", "regime_raw", "regime"]].tail(10))
@@ -190,6 +202,16 @@ print(regime_stats)
 analysis_df["position"] = np.where(analysis_df["regime"] == 2, 0.5, 1.0)
 analysis_df["strategy_returns"] = analysis_df["daily_returns"] * analysis_df["position"]
 
+# calculate inverse-volatility scaling factor
+# if daily volatility doubles, we halve our position; if vol halves, we scale up
+iv_multiplier = target_daily_vol / analysis_df["daily_vol_est"]
+
+# clamp multiplier to avoid extreme exposures
+iv_multiplier = iv_multiplier.clip(lower=size_floor, upper=size_cap)
+
+# final volatility-adjusted position = regime weight × inverse-vol scaling
+analysis_df["position_vol_adj"] = analysis_df["position"] * iv_multiplier
+
 # Buy & Hold benchmark
 bh_sharpe = sharpe_daily(analysis_df["daily_returns"])
 strat_sharpe = sharpe_daily(analysis_df["strategy_returns"])
@@ -197,11 +219,24 @@ strat_sharpe = sharpe_daily(analysis_df["strategy_returns"])
 bh_dd = max_drawdown_from_returns(analysis_df["daily_returns"])
 strat_dd = max_drawdown_from_returns(analysis_df["strategy_returns"])
 
+# backtest Buy & Hold 
+analysis_df["ret_bh"] = analysis_df["daily_returns"]
+
+# backtest regime-based strategy 
+analysis_df["ret_regime"] = analysis_df["daily_returns"] * analysis_df["position"]
+
+# backtest volatility-adjusted regime strategy 
+analysis_df["ret_voladj"] = analysis_df["daily_returns"] * analysis_df["position_vol_adj"]
+
 print("\n=== Backtest Summary ===")
-print(f"Buy & Hold Sharpe : {bh_sharpe:.3f}")
-print(f"Strategy Sharpe   : {strat_sharpe:.3f}")
-print(f"Buy & Hold MaxDD  : {bh_dd:.1%}")
-print(f"Strategy MaxDD    : {strat_dd:.1%}")
+for name, series in [
+    ("Buy & Hold", analysis_df["ret_bh"]),
+    ("Regime",     analysis_df["ret_regime"]),
+    ("Vol-Adj",    analysis_df["ret_voladj"])
+]:
+    s = sharpe_daily(series)
+    dd = max_drawdown_from_returns(series)
+    print(f"{name:10s} | Sharpe {s:5.3f} | MaxDD {dd:6.1%}")
 
 
 # ------------------ graph ------------------
@@ -241,6 +276,7 @@ def plot_regime_blocks(df, price_col="close", regime_col="regime"):
     plt.show()
 
 plot_regime_blocks(analysis_df)
+
 
 
 
