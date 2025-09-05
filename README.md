@@ -34,9 +34,9 @@ I built this project to deepen my understanding of:
 ## Results
 
 - High-volatility regimes (~10% of days) captured most major drawdowns (-43%), confirming strong volatility clustering.
-- Backtested allocation strategy:
-    - Sharpe ratio: +12% improvement vs buy-and-hold
-    - Max drawdown: reduced by 29%
+- Backtested volatility-based allocation strategy:
+    - Sharpe ratio: +26.2% improvement vs buy-and-hold
+    - Max drawdown: reduced by 47%
 - Generated visualisations showing regime transitions and performance differences.
 
 ---
