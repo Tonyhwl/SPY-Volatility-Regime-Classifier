@@ -73,7 +73,7 @@ def label_volatility_regime(
 
 # hysteresis prevents regime flipping between low and mid etc., regime only changes if it remains the same for a few days
 def apply_hysteresis(
-    regime_series: pd.Series, # pd.Series of {0, 1, 2}or NaN (raw regime labels per day)
+    regime_series: pd.Series, # pd.Series of {0, 1, 2} or NaN (raw regime labels per day)
     k_consecutive: int = 7, # how many consecutive days are in the new regime are required before flipping
 ) -> pd.Series:
     smoothed_labels = []  # build the output, one label per day
@@ -96,14 +96,14 @@ def apply_hysteresis(
             smoothed_labels.append(current_regime)
             continue
 
-        # today's raw label matches our current official regime → no switch
+        # today's raw label matches our current official regime -> no switch
         if raw_label == current_regime:
             # reset streak to this same regime (keeps logic simple)
             run_regime = raw_label
             run_length = 1
             smoothed_labels.append(current_regime)
 
-        # today's raw label is different → possible new regime forming
+        # today's raw label is different -> possible new regime forming
         else:
             # extend if same
             if run_regime == raw_label:
@@ -186,7 +186,7 @@ regime_stats = (
 
 print("\n=== Volatility Regime Summary ===")
 print(regime_stats)
-# Strategy: 100% invested in low and mid, 50% in high
+# strategy: 100% invested in low and mid, 50% in high
 analysis_df["position"] = np.where(analysis_df["regime"] == 2, 0.5, 1.0)
 analysis_df["strategy_returns"] = analysis_df["daily_returns"] * analysis_df["position"]
 
@@ -241,6 +241,7 @@ def plot_regime_blocks(df, price_col="close", regime_col="regime"):
     plt.show()
 
 plot_regime_blocks(analysis_df)
+
 
 
 
